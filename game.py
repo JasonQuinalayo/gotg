@@ -1,5 +1,6 @@
 import pygame
 import sys
+from threading import Thread
 from rank import Rank
 from ai import generate_random_init_form
 pygame.init()
@@ -8,6 +9,7 @@ SQUARE_DIM = 90
 PIECE_WIDTH = 80
 PIECE_HEIGHT = 48
 PADDING = 3
+SCREEN = pygame.display.set_mode((PADDING * 10 + SQUARE_DIM * 9, PADDING * 9 + SQUARE_DIM * 8))
 
 RANK_IMG = {
     Rank.FLAG: 'flag.png',
@@ -34,8 +36,7 @@ for rank, file in RANK_IMG.items():
 
 
 class Square:
-    def __init__(self, screen, left, top, row, col):
-        self._screen = screen
+    def __init__(self, left, top, row, col):
         self._rect = pygame.Rect(left, top, SQUARE_DIM, SQUARE_DIM)
         self._outline_rect = pygame.Rect(left + (SQUARE_DIM - PIECE_WIDTH) / 2 - 3,
                                          top + (SQUARE_DIM - PIECE_HEIGHT) / 2 - 3,
@@ -45,59 +46,69 @@ class Square:
         self.col = col
 
     def draw_square(self):
-        pygame.draw.rect(self._screen, (108, 0, 0), self._rect)
+        pygame.draw.rect(SCREEN, (108, 0, 0), self._rect)
 
     def draw_piece(self, surface):
         rect = surface.get_rect(center=(self._rect.left + SQUARE_DIM / 2, self._rect.top + SQUARE_DIM / 2))
-        self._screen.blit(surface, rect)
+        SCREEN.blit(surface, rect)
 
     def touches(self, x, y):
-        return self._rect.left <= x <= self._rect.left + SQUARE_DIM and \
-               self._rect.top <= y <= self._rect.top + SQUARE_DIM
+        return self._rect.collidepoint(x, y)
 
     def color(self, rgb):
-        pygame.draw.rect(self._screen, rgb, self._rect)
+        pygame.draw.rect(SCREEN, rgb, self._rect)
 
     def outline_piece(self, rgb):
-        pygame.draw.rect(self._screen, rgb, self._outline_rect)
-
-
-def _run(tick, cond):
-    clock = pygame.time.Clock()
-    while cond():
-        clock.tick(60)
-        events = pygame.event.get()
-        for event in events:
-            if event.type == pygame.QUIT:
-                sys.exit()
-        tick(events)
-
-
-def print_board(board):
-    print()
-    b = [[str(i) for i in range(-1,9)]] + \
-        [[str(idx)] + [str(x.player) + "_" + str(x.rank.value) if x is not None else '#' for x in row] for
-         idx, row in enumerate(board)]
-    print('\n'.join(['\t'.join([str(cell) for cell in row]) for row in b]))
+        pygame.draw.rect(SCREEN, rgb, self._outline_rect)
 
 
 class Game:
-    def __init__(self, gog):
+    def __init__(self, gog, ai):
         self._gog = gog
-        self._screen = pygame.display.set_mode((PADDING * 10 + SQUARE_DIM * 9, PADDING * 9 + SQUARE_DIM * 8))
         self._init_form = generate_random_init_form()
         self._squares = []
         self._started = False
         self._selected_square = None
         self._highlight_green = []
-        self._ready_button = pygame.Rect(0, 0, 300, 80)
-        self._ready_button.center = (PADDING * 10 + SQUARE_DIM * 9) / 2, 300
+        self._highlight_orange = []
+        self._glow_ready = False
+        self._ready_text_surface = pygame.font.SysFont('comicsansms', 50).render('READY', True, (255, 255, 255))
+        self._ready_text_glow_surface = pygame.font.SysFont('comicsansms', 50).render('READY', True, (102, 255, 107))
+        self._ready_text_rect = self._ready_text_surface.get_rect(center=((PADDING * 10 + SQUARE_DIM * 9) / 2, 300))
+        self._ready_button_rect = self._ready_text_rect.copy()
+        self._ready_button_rect.width = self._ready_text_rect.width + 20
+        self._ready_button_rect.height = self._ready_text_rect.height + 20
+        self._ready_button_rect.center = self._ready_text_rect.center
+        self._outcome_text_surface = {
+            1: pygame.font.SysFont('comicsansms', 50).render('VICTORY!', True, (41, 155, 255)),
+            2: pygame.font.SysFont('comicsansms', 50).render('DEFEAT!', True, (238, 255, 0))
+        }
+        self._outcome_rect = {
+            1: self._outcome_text_surface[1].get_rect(
+                center=(((10 * PADDING + 9 * SQUARE_DIM) / 2), (9 * PADDING + 8 * SQUARE_DIM) / 2)),
+            2: self._outcome_text_surface[2].get_rect(
+                center=(((10 * PADDING + 9 * SQUARE_DIM) / 2), (9 * PADDING + 8 * SQUARE_DIM) / 2)),
+        }
+        self._glow_restart = False
+        self._restart_text_surface = pygame.font.SysFont('comicsansms', 30).render('RESTART', True, (255, 255, 255))
+        self._restart_text_glow_surface = pygame.font.SysFont('comicsansms', 30).render('RESTART', True, (102, 255, 99))
+        self._restart_text_rect = self._restart_text_surface.get_rect(center=((PADDING * 10 + SQUARE_DIM * 9) / 2, 450))
+        self._restart_button_rect = self._restart_text_rect.copy()
+        self._restart_button_rect.width = self._restart_text_rect.width + 20
+        self._restart_button_rect.height = self._restart_text_rect.height + 20
+        self._restart_button_rect.center = self._restart_text_rect.center
+        self._calculating_text_surface = pygame.font.SysFont('comicsansms', 30).render('enemy thinking xd', True, (255, 255, 255))
+        self._calculating_text_rect = self._calculating_text_surface.get_rect(center=(((10 * PADDING + 9 * SQUARE_DIM) / 2), (9 * PADDING + 8 * SQUARE_DIM) / 2)),
         self._pov = None
+        self._ai = ai
+        self._restart = False
+        self._exit = False
+        self._get_ai_move = False
+        self._ai_move = None
         for i in range(8):
             row = []
             for j in range(9):
                 row.append(Square(
-                    self._screen,
                     (j + 1) * PADDING + j * SQUARE_DIM,
                     (i + 1) * PADDING + i * SQUARE_DIM,
                     i,
@@ -106,69 +117,173 @@ class Game:
             self._squares.append(row)
 
     def _draw_board(self):
-        self._screen.fill((18, 0, 0))
+        SCREEN.fill((18, 0, 0))
         for row in self._squares:
             for square in row:
                 square.draw_square()
-        if self._selected_square:
-            self._selected_square.outline_piece((12, 255, 0))
+        if self._highlight_orange:
+            for square in self._highlight_orange:
+                square.color((255, 77, 0))
         if self._highlight_green:
             for square in self._highlight_green:
                 square.color((12, 255, 0))
+        if self._selected_square:
+            self._selected_square.outline_piece((12, 255, 0))
         if not self._started:
-            pygame.draw.rect(self._screen, (100, 100, 100), self._ready_button)
+            pygame.draw.rect(SCREEN, (100, 100, 100), self._ready_button_rect)
+            if self._glow_ready:
+                SCREEN.blit(self._ready_text_glow_surface, self._ready_text_rect)
+            else:
+                SCREEN.blit(self._ready_text_surface, self._ready_text_rect)
             for i, row in enumerate(self._init_form):
                 for j, square in enumerate(row):
                     if square is not None:
-                        self._squares[5 + i][j].draw_piece(RANK_IMG[square])
+                        self._squares[7-i][8-j].draw_piece(RANK_IMG[square])
         else:
             assert self._pov
             for i, row in enumerate(self._pov):
                 for j, square in enumerate(row):
                     if square is not None:
                         if square.player == 2:
-                            self._squares[i][j].draw_piece(ENEMY_PIECE_IMG)
+                            if self._gog.victor:
+                                self._squares[7-i][8-j].outline_piece((255, 55, 54))
+                                self._squares[7-i][8-j].draw_piece(RANK_IMG[square.rank])
+                            else:
+                                self._squares[7-i][8-j].draw_piece(ENEMY_PIECE_IMG)
                         else:
-                            self._squares[i][j].draw_piece(RANK_IMG[square.rank])
+                            self._squares[7-i][8-j].draw_piece(RANK_IMG[square.rank])
+            if self._get_ai_move:
+                SCREEN.blit(self._calculating_text_surface, self._calculating_text_rect)
+        if self._gog.victor:
+            SCREEN.blit(self._outcome_text_surface[self._gog.victor], self._outcome_rect[self._gog.victor])
+            pygame.draw.rect(SCREEN, (100, 100, 100), self._restart_button_rect)
+            if self._glow_restart:
+                SCREEN.blit(self._restart_text_glow_surface, self._restart_text_rect)
+            else:
+                SCREEN.blit(self._restart_text_surface, self._restart_text_rect)
+
         pygame.display.flip()
 
-    def run(self):
-        def init_pos_tick(events):
-            self._draw_board()
-            for event in events:
-                if event.type == pygame.MOUSEBUTTONDOWN:
+    def start(self):
+        ai_thread = Thread(target=self._compute_ai_move)
+        ai_thread.start()
+        self._run()
+        ai_thread.join(0)
+        return self._restart
+
+    def _compute_ai_move(self):
+        while not self._restart and not self._exit:
+            if not self._get_ai_move:
+                continue
+            move = self._ai.get_move()
+            self._ai_move = move
+            self._get_ai_move = False
+
+    def _run(self):
+        self._ai.set_pov(self._gog.set_player_pieces(self._ai.get_init_form(), 2))
+
+        def init_pos_tick(event):
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if self._selected_square:
+                    for i, row in enumerate(self._squares[5:8]):
+                        for j, square in enumerate(row):
+                            if self._init_form[2-i][8-j]:
+                                continue
+                            if square.touches(event.pos[0], event.pos[1]):
+                                self._init_form[2-i][8-j] = \
+                                    self._init_form[2 - self._selected_square.row + 5][8 - self._selected_square.col]
+                                self._init_form[2 - self._selected_square.row + 5][8 - self._selected_square.col] = None
+                    self._selected_square = None
+                    self._highlight_green = []
+                else:
+                    highlight = []
+                    for i, row in enumerate(self._squares[5:8]):
+                        for j, square in enumerate(row):
+                            if not self._init_form[2-i][8-j]:
+                                highlight.append(square)
+                                continue
+                            if square.touches(event.pos[0], event.pos[1]):
+                                self._selected_square = square
+                                self._highlight_green = highlight
+                if self._ready_button_rect.collidepoint(event.pos[0], event.pos[1]):
+                    self._selected_square = None
+                    self._highlight_green = []
+                    self._pov = self._gog.set_player_pieces(self._init_form, 1)
+                    self._started = True
+            elif event.type == pygame.MOUSEMOTION:
+                if self._ready_button_rect.collidepoint(event.pos[0], event.pos[1]):
+                    self._glow_ready = True
+                else:
+                    self._glow_ready = False
+
+        self._run_ticks(init_pos_tick, lambda: not self._started)
+
+        self._ai.enemy_set_pieces()
+
+        def main_tick(event):
+            assert self._pov
+            assert self._started
+            if self._ai_move:
+                next_event = self._gog.move(self._ai_move[0], self._ai_move[1], 2)
+                self._ai.board_event((next_event[0][2], next_event[1]))
+                self._highlight_orange = [self._squares[x][y] for x, y in self._ai_move]
+                self._ai_move = None
+            if self._gog.current_turn != 1 or self._get_ai_move:
+                return
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if self._selected_square:
+                    game_event = None
+                    for i, row in enumerate(self._squares):
+                        for j, square in enumerate(row):
+                            if self._pov[7-i][8-j] and self._pov[7-i][8-j].player == 1:
+                                continue
+                            if square.touches(event.pos[0], event.pos[1]):
+                                game_event = self._gog.move((7 - self._selected_square.row, 8 - self._selected_square.col),
+                                                           (7 - i, 8 - j), 1)
+                    if game_event:
+                        self._ai.board_event((game_event[0][2], game_event[1]))
+                        self._get_ai_move = True
+                        self._highlight_orange = []
+                    self._selected_square = None
+                    self._highlight_green = []
+                else:
+                    for i, row in enumerate(self._squares):
+                        for j, square in enumerate(row):
+                            if not self._pov[7-i][8-j] or self._pov[7-i][8-j].player != 1:
+                                continue
+                            if square.touches(event.pos[0], event.pos[1]):
+                                self._selected_square = square
                     if self._selected_square:
-                        for i, row in enumerate(self._squares[5:8]):
-                            for j, square in enumerate(row):
-                                if self._init_form[i][j]:
-                                    continue
-                                if square.touches(event.pos[0], event.pos[1]):
-                                    self._init_form[i][j] = \
-                                        self._init_form[self._selected_square.row - 5][self._selected_square.col]
-                                    self._init_form[self._selected_square.row - 5][self._selected_square.col] = None
-                        self._selected_square = None
-                        self._highlight_green = []
-                    else:
                         highlight = []
-                        for i, row in enumerate(self._squares[5:8]):
-                            for j, square in enumerate(row):
-                                if not self._init_form[i][j]:
-                                    highlight.append(square)
-                                    continue
-                                if square.touches(event.pos[0], event.pos[1]):
-                                    self._selected_square = square
-                                    self._highlight_green = highlight
-                    if self._touches_ready_button(event.pos[0], event.pos[1]):
-                        self._pov = self._gog.set_player_pieces(self._init_form, 1)
-                        self._started = True
-        _run(init_pos_tick, lambda: not self._started)
+                        for dr, dc in ((0, 1), (1, 0), (0, -1), (-1, 0)):
+                            if self._is_valid_destination(7 - self._selected_square.row - dr, 8 - self._selected_square.col - dc):
+                                highlight.append(self._squares[self._selected_square.row + dr][self._selected_square.col + dc])
+                        self._highlight_green = highlight
+        self._run_ticks(main_tick, lambda: not self._gog.victor)
 
-        def main_game(events):
+        def end_tick(event):
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if self._restart_button_rect.collidepoint(event.pos[0], event.pos[1]):
+                    self._restart = True
+            elif event.type == pygame.MOUSEMOTION:
+                if self._restart_button_rect.collidepoint(event.pos[0], event.pos[1]):
+                    self._glow_restart = True
+                else:
+                    self._glow_restart = False
+
+        self._run_ticks(end_tick, lambda: not self._restart)
+
+    def _run_ticks(self, tick, cond):
+        clock = pygame.time.Clock()
+        while cond():
             self._draw_board()
+            clock.tick(60)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self._exit = True
+                    sys.exit()
+                tick(event)
 
-        _run(main_game, lambda: True)
-
-    def _touches_ready_button(self, x, y):
-        return self._ready_button.left <= x <= self._ready_button.right and \
-               self._ready_button.top <= y <= self._ready_button.bottom
+    def _is_valid_destination(self, row, col):
+        return 0 <= row < 8 and 0 <= col < 9 and (not self._pov[row][col] or self._pov[row][col].player == 2)
 

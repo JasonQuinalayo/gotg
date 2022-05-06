@@ -17,24 +17,16 @@ initial_pos_two = [
 ]
 
 
-def print_board(board):
-    print()
-    b = [[str(i) for i in range(-1,9)]] + \
-        [[str(idx)] + [str(x.player) + "_" + str(x.rank.value) if x is not None else '#' for x in row] for
-         idx, row in enumerate(board)]
-    print('\n'.join(['\t'.join([str(cell) for cell in row]) for row in b]))
-
-
 class InitialPosTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.game = GOG()
+        self.gog = GOG()
 
     def test_valid_initial_pos(self):
-        self.assertIsNotNone(self.game.set_player_pieces(initial_pos_one, 1))
-        self.assertIsNotNone(self.game.set_player_pieces(initial_pos_two, 2))
+        self.assertIsNotNone(self.gog.set_player_pieces(initial_pos_one, 1))
+        self.assertIsNotNone(self.gog.set_player_pieces(initial_pos_two, 2))
 
     def tearDown(self) -> None:
-        self.game = None
+        self.gog = None
 
 
 def inv(pos):
@@ -54,12 +46,11 @@ def get_move_povs(pos1, pos2, player):
 
 class GameTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.game = GOG()
-        self.pov = [
-            None,
-            self.game.set_player_pieces(initial_pos_one, 1),
-            self.game.set_player_pieces([row[::-1] for row in initial_pos_two[::-1]], 2),
-        ]
+        self.gog = GOG()
+        self.pov = {
+            1: self.gog.set_player_pieces(initial_pos_one, 1),
+            2: self.gog.set_player_pieces([row[::-1] for row in initial_pos_two[::-1]], 2),
+        }
 
     def _assert_mover_lives(self, pos1, pos2, player):
         player_move, _ = get_move_povs(pos1, pos2, player)
@@ -77,12 +68,11 @@ class GameTest(unittest.TestCase):
     def _assert_movement(self, pos1, pos2, player, surviving_piece):
         player_move, other_move = get_move_povs(pos1, pos2, player)
         other_player = 1 if player == 2 else 2
-        old_boards = [
-            None,
-            [row[:] for row in self.pov[1]],
-            [row[:] for row in self.pov[2]]
-        ]
-        self.assertTrue(self.game.move(player_move[0], player_move[1], player))
+        old_boards = {
+            1: [row[:] for row in self.pov[1]],
+            2: [row[:] for row in self.pov[2]]
+        }
+        self.assertIsNotNone(self.gog.move(player_move[0], player_move[1], player))
         for i in range(8):
             if i != player_move[0][0] and i != player_move[1][0]:
                 self.assertListEqual(old_boards[player][i], self.pov[player][i])
@@ -117,12 +107,11 @@ class GameTest(unittest.TestCase):
 
     def _assert_no_movement(self, pos1, pos2, player, msg):
         player_move, _ = get_move_povs(pos1, pos2, player)
-        old_boards = [
-            None,
-            [row[:] for row in self.pov[1]],
-            [row[:] for row in self.pov[2]]
-        ]
-        self.assertFalse(self.game.move(player_move[0], player_move[1], 1), msg)
+        old_boards = {
+            1: [row[:] for row in self.pov[1]],
+            2: [row[:] for row in self.pov[2]]
+        }
+        self.assertIsNone(self.gog.move(player_move[0], player_move[1], 1), msg)
         for i in range(8):
             self.assertListEqual(old_boards[1][i], self.pov[1][i])
             self.assertListEqual(old_boards[2][i], self.pov[2][i])
@@ -161,176 +150,176 @@ class GameTest(unittest.TestCase):
 
     # 1_flag  kills 2_flag
     def test_game1(self):
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((2, 1), (3, 1), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((5, 1), (4, 1), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((3, 1), (4, 1), 1)
-        self.assertEqual(self.game.victor, 1)
+        self.assertEqual(self.gog.victor, 1)
 
     # 2_flag kills 1_flag
     def test_game2(self):
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((2, 1), (3, 1), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((5, 1), (4, 1), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((2, 0), (3, 0), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((4, 1), (3, 1), 2)
-        self.assertEqual(self.game.victor, 2)
+        self.assertEqual(self.gog.victor, 2)
 
     # 2_general_5 kills 1_flag
     def test_game3(self):
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((2, 1), (3, 1), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((5, 2), (4, 2), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((3, 1), (3, 2), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((4, 2), (3, 2), 2)
-        self.assertEqual(self.game.victor, 2)
+        self.assertEqual(self.gog.victor, 2)
 
     # 2_flag reaches row 1 but doesn't win immediately due to neighboring enemy pieces
     # wins after player 1 does not capture 2_flag
     def test_game4(self):
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((2, 1), (3, 1), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((5, 1), (4, 1), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((3, 1), (3, 0), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((4, 1), (3, 1), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((2, 2), (3, 2), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((3, 1), (2, 1), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((1, 2), (2, 2), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((5, 2), (4, 2), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((1, 1), (1, 2), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((2, 1), (1, 1), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_draw((3, 2), (4, 2), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((7, 6), (7, 7), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((2, 2), (3, 2), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((7, 7), (7, 6), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((1, 2), (2, 2), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((7, 6), (7, 7), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((0, 2), (1, 2), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((5, 5), (4, 5), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((0, 1), (0, 2), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((4, 5), (3, 5), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_draw((2, 5), (3, 5), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((1, 1), (0, 1), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((0, 6), (0, 7), 1)
-        self.assertEqual(self.game.victor, 2)
+        self.assertEqual(self.gog.victor, 2)
 
     # 1_flag reaches row 8 and wins immediately
     def test_game5(self):
         self._assert_mover_lives((2, 1), (3, 1), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((5, 1), (4, 1), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((2, 3), (3, 3), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((4, 1), (4, 0), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((3, 3), (4, 3), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((5, 2), (4, 2), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((4, 3), (4, 4), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((4, 2), (4, 3), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((4, 4), (4, 5), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((4, 3), (4, 4), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((4, 5), (5, 5), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((5, 3), (4, 3), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((5, 5), (6, 5), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((4, 3), (3, 3), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((2, 2), (2, 3), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((3, 3), (2, 3), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_dies((2, 4), (2, 3), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((6, 2), (5, 2), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((6, 5), (6, 4), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((5, 2), (4, 2), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((6, 4), (5, 4), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((4, 2), (3, 2), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((5, 4), (6, 4), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((4, 4), (5, 4), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((3, 1), (4, 1), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((7, 2), (6, 2), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((4, 1), (5, 1), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_dies((5, 4), (6, 4), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_dies((6, 4), (7, 4), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((6, 2), (5, 2), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_dies((1, 3), (2, 3), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((5, 2), (4, 2), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((5, 1), (5, 2), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((6, 1), (5, 1), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((5, 2), (6, 2), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((7, 1), (6, 1), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((1, 4), (1, 3), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((6, 3), (5, 3), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((1, 3), (2, 3), 1)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((7, 3), (6, 3), 2)
-        self.assertFalse(self.game.victor)
+        self.assertFalse(self.gog.victor)
         self._assert_mover_lives((6, 2), (7, 2), 1)
-        self.assertEqual(self.game.victor, 1)
+        self.assertEqual(self.gog.victor, 1)
 
     def tearDown(self) -> None:
-        self.game = None
+        self.gog = None
         self.pov = None
 
 

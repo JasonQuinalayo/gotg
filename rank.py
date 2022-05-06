@@ -20,38 +20,36 @@ class Rank(Enum):
     SPY = 14
 
 
-player_pieces = {
-    Rank.FLAG: 1,
-    Rank.SPY: 2,
-    Rank.PRIVATE: 6,
-    Rank.SERGEANT: 1,
-    Rank.SECOND_LIEUTENANT: 1,
-    Rank.FIRST_LIEUTENANT: 1,
-    Rank.CAPTAIN: 1,
-    Rank.MAJOR: 1,
-    Rank.LIEUTENANT_COLONEL: 1,
-    Rank.COLONEL: 1,
-    Rank.GENERAL_ONE: 1,
-    Rank.GENERAL_TWO: 1,
-    Rank.GENERAL_THREE: 1,
-    Rank.GENERAL_FOUR: 1,
-    Rank.GENERAL_FIVE: 1,
-}
+beaten_by = {}
 
 
-class DuelResult(Enum):
-    ATTACKER_WINS = 1
-    DRAW = 0
-    ATTACKER_LOSES = -1
+def get_beaten_by_regular(rank):
+    return {x for x in Rank if x.value < rank.value}
 
 
-def duel(attacker, defender):
-    if defender.rank == Rank.FLAG or (attacker.rank == Rank.PRIVATE and defender.rank == Rank.SPY):
-        return DuelResult.ATTACKER_WINS
-    if attacker.rank == Rank.SPY and defender.rank == Rank.PRIVATE:
-        return DuelResult.ATTACKER_LOSES
-    if attacker.rank == defender.rank:
-        return DuelResult.DRAW
-    if attacker.rank.value > defender.rank.value:
-        return DuelResult.ATTACKER_WINS
-    return DuelResult.ATTACKER_LOSES
+for rank in Rank:
+    if rank == Rank.PRIVATE:
+        beaten_by[rank] = {Rank.SPY, Rank.FLAG}
+    elif rank == Rank.FLAG:
+        beaten_by[rank] = {Rank.FLAG}
+    elif rank == Rank.SPY:
+        beaten_by[rank] = get_beaten_by_regular(rank) ^ {Rank.PRIVATE}
+    else:
+        beaten_by[rank] = get_beaten_by_regular(rank)
+
+
+def get_beats_regular(rank):
+    return {x for x in Rank if x.value > rank.value}
+
+
+beats = {}
+
+for rank in Rank:
+    if rank == Rank.PRIVATE:
+        beats[rank] = get_beats_regular(rank) ^ {Rank.SPY}
+    elif rank == Rank.FLAG:
+        beats[rank] = get_beats_regular(rank) | {Rank.FLAG}
+    elif rank == Rank.SPY:
+        beats[rank] = {Rank.PRIVATE}
+    else:
+        beats[rank] = get_beats_regular(rank)
